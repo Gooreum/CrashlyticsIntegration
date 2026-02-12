@@ -1,0 +1,23 @@
+iOS .gitignore
+Xcode
+gitignore.io results for: Xcode
+Build artifacts
+build/ DerivedData/
+
+Personal settings
+xcuserdata/
+
+Xcode Patch
+*.moved-aside *.xccheckout *.xcscmblueprint
+
+Obj-C/Swift specific
+*.hmap *.ipa *.dSYM.zip *.dSYM
+
+Playgrounds
+timeline.xctimeline playground.xcworkspace
+
+Swift Package Manager
+.build/
+
+CocoaPods
+Pods/ Podfile.lock
