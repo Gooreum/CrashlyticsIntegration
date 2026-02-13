@@ -13,90 +13,44 @@
 //
 
 
+
 import SwiftUI
+import FirebaseCrashlytics
 
 struct AppView2: View {
+    let error = NSError()
+    let array = ["a", "b", "c"]
+    
     var body: some View {
         VStack {
-            Button("Crash0") {
+            
+            
+            Button("FatalCrash") {
               fatalError("Crash was triggered")
             }
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-            Button("Crash1") {
+            Button("FatalErrorCrash") {
               fatalError("Crash was triggered")
             }
-            Button("Crash2") {
-              fatalError("Crash was triggered")
+            
+            
+            Button("IndexCrash") {
+              print(array[4])
             }
-            Button("Crash3") {
-              fatalError("Crash was triggered")
+            
+            Button("IndexCrash2") {
+              print(array[4])
             }
-            Button("Crash4") {
-              fatalError("Crash was triggered")
+            
+            Button("IndexCrash3") {
+              print(array[4])
             }
-            Button("Crash5") {
-              fatalError("Crash was triggered")
+            
+            Button("CrashCustomError") {
+                Crashlytics.crashlytics().record(error: error)
             }
-            Button("Crash6") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash7") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash8") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash1") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash2") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash3") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash4") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash5") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash6") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash7") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash8") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash1") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash2") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash3") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash4") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash5") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash6") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash7") {
-              fatalError("Crash was triggered")
-            }
-            Button("Crash8") {
-              fatalError("Crash was triggered")
-            }
+            
+            
+            
         }
         .padding(10)
         

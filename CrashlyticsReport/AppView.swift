@@ -29,7 +29,13 @@ struct AppView: View {
               print(array[4])
             }
             
+            Button("IndexCrash2") {
+              print(array[4])
+            }
             
+            Button("IndexCrash3") {
+              print(array[4])
+            }
             
             Button("CrashCustomError") {
                 Crashlytics.crashlytics().record(error: error)

@@ -27,7 +27,7 @@ struct CrashlyticsReportApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationView {
-                AppView()
+                AppView2()
 //                ContentView()
             }
         }
