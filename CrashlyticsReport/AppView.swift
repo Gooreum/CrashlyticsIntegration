@@ -17,16 +17,6 @@ struct AppView: View {
         VStack {
             
             
-            Button("CrashCustomError") {
-                Crashlytics.crashlytics().record(error: error)
-            }
-            
-            
-            
-            Button("IndexCrash") {
-              print(array[4])
-            }
-            
             Button("FatalCrash") {
               fatalError("Crash was triggered")
             }
@@ -34,6 +24,16 @@ struct AppView: View {
               fatalError("Crash was triggered")
             }
             
+            
+            Button("IndexCrash") {
+              print(array[4])
+            }
+            
+            
+            
+            Button("CrashCustomError") {
+                Crashlytics.crashlytics().record(error: error)
+            }
             
             
             
