@@ -15,9 +15,6 @@ struct AppView: View {
     
     var body: some View {
         VStack {
-            Button("FatalErrorCrash") {
-              fatalError("Crash was triggered")
-            }
             
             
             Button("CrashCustomError") {
@@ -25,15 +22,19 @@ struct AppView: View {
             }
             
             
-            Button("FatalCrash") {
-              fatalError("Crash was triggered")
-            }
-            
-            
             
             Button("IndexCrash") {
               print(array[4])
             }
+            
+            Button("FatalCrash") {
+              fatalError("Crash was triggered")
+            }
+            Button("FatalErrorCrash") {
+              fatalError("Crash was triggered")
+            }
+            
+            
             
             
         }
