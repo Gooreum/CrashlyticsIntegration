@@ -1,0 +1,112 @@
+[debug] [2026-02-12T15:06:55.228Z] ----------------------------------------------------------------------
+[debug] [2026-02-12T15:06:55.231Z] Command:       /Users/minguseo/.nvm/versions/node/v24.13.1/bin/node /Users/minguseo/.nvm/versions/node/v24.13.1/bin/firebase functions:shell
+[debug] [2026-02-12T15:06:55.232Z] CLI Version:   15.5.1
+[debug] [2026-02-12T15:06:55.232Z] Platform:      darwin
+[debug] [2026-02-12T15:06:55.233Z] Node Version:  v24.13.1
+[debug] [2026-02-12T15:06:55.233Z] Time:          Fri Feb 13 2026 00:06:55 GMT+0900 (한국 표준시)
+[debug] [2026-02-12T15:06:55.236Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-12T15:06:56.085Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-12T15:06:56.086Z] > authorizing via signed-in user (tjalsrnek@gmail.com)
+[debug] [2026-02-12T15:06:56.088Z] [iam] checking project crashyltics-slack for permissions ["firebase.projects.get"]
+[debug] [2026-02-12T15:06:56.090Z] Checked if tokens are valid: true, expires at: 1770911343343
+[debug] [2026-02-12T15:06:56.090Z] Checked if tokens are valid: true, expires at: 1770911343343
+[debug] [2026-02-12T15:06:56.091Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/crashyltics-slack:testIamPermissions [none]
+[debug] [2026-02-12T15:06:56.091Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/crashyltics-slack:testIamPermissions  x-goog-user-project=crashyltics-slack
+[debug] [2026-02-12T15:06:56.091Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/crashyltics-slack:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-02-12T15:06:56.382Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/crashyltics-slack:testIamPermissions 200
+[debug] [2026-02-12T15:06:56.383Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/crashyltics-slack:testIamPermissions {"permissions":["firebase.projects.get"]}
+[warn] ⚠  functions: Functions Emulator unable to start on port 5000, starting on 5001 instead. {"metadata":{"emulator":{"name":"functions"},"message":"Functions Emulator unable to start on port 5000, starting on 5001 instead."}}
+[debug] [2026-02-12T15:06:56.748Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-02-12T15:06:56.762Z] defaultcredentials: writing to file /Users/minguseo/.config/firebase/tjalsrnek_gmail_com_application_default_credentials.json
+[debug] [2026-02-12T15:06:56.763Z] DEBUG: Setting GAC to /Users/minguseo/.config/firebase/tjalsrnek_gmail_com_application_default_credentials.json
+[debug] [2026-02-12T15:06:56.763Z] Checked if tokens are valid: true, expires at: 1770911343343
+[debug] [2026-02-12T15:06:56.763Z] Checked if tokens are valid: true, expires at: 1770911343343
+[debug] [2026-02-12T15:06:56.763Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/crashyltics-slack/adminSdkConfig [none]
+[debug] [2026-02-12T15:06:57.160Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/crashyltics-slack/adminSdkConfig 200
+[debug] [2026-02-12T15:06:57.160Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/crashyltics-slack/adminSdkConfig {"projectId":"crashyltics-slack","storageBucket":"crashyltics-slack.firebasestorage.app"}
+[debug] [2026-02-12T15:06:57.190Z] [functions] Watching "/Users/minguseo/Desktop/CrashlyticsReport/functions" for Cloud Functions...
+[debug] [2026-02-12T15:06:57.200Z] Validating nodejs source
+[debug] [2026-02-12T15:06:57.992Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "24"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.13.5",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.15.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.4.1"
+  },
+  "private": true
+}
+[debug] [2026-02-12T15:06:57.992Z] Building nodejs source
+[debug] [2026-02-12T15:06:57.992Z] Failed to find version of module node: reached end of search path /Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules
+[info] ✔  functions: Using node@24 from host. 
+[debug] [2026-02-12T15:06:57.995Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-02-12T15:06:58.005Z] Found firebase-functions binary at '/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8248
+
+[error] (node:35271) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+[debug] [2026-02-12T15:06:58.644Z] Got response from /__/functions.yaml {"endpoints":{"postFatalToSlack":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-northeast3"],"labels":{},"eventTrigger":{"eventType":"google.firebase.firebasealerts.alerts.v1.published","eventFilters":{"alerttype":"crashlytics.newFatalIssue"},"retry":false},"entryPoint":"postFatalToSlack"},"postNonFatalToSlack":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-northeast3"],"labels":{},"eventTrigger":{"eventType":"google.firebase.firebasealerts.alerts.v1.published","eventFilters":{"alerttype":"crashlytics.newNonfatalIssue"},"retry":false},"entryPoint":"postNonFatalToSlack"},"postRegressionToSlack":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-northeast3"],"labels":{},"eventTrigger":{"eventType":"google.firebase.firebasealerts.alerts.v1.published","eventFilters":{"alerttype":"crashlytics.regression"},"retry":false},"entryPoint":"postRegressionToSlack"},"postVelocityToSlack":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-northeast3"],"labels":{},"eventTrigger":{"eventType":"google.firebase.firebasealerts.alerts.v1.published","eventFilters":{"alerttype":"crashlytics.velocity"},"retry":false},"entryPoint":"postVelocityToSlack"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+[debug] [2026-02-12T15:07:02.712Z] [functions] Loaded functions definitions from source: postFatalToSlack, postNonFatalToSlack, postRegressionToSlack, postVelocityToSlack.
+[debug] [2026-02-12T15:07:02.715Z] [functions[asia-northeast3-postFatalToSlack]] function ignored because the firebasealerts.googleapis.com emulator does not exist or is not running.
+[debug] [2026-02-12T15:07:02.715Z] [functions[asia-northeast3-postNonFatalToSlack]] function ignored because the firebasealerts.googleapis.com emulator does not exist or is not running.
+[debug] [2026-02-12T15:07:02.715Z] [functions[asia-northeast3-postRegressionToSlack]] function ignored because the firebasealerts.googleapis.com emulator does not exist or is not running.
+[debug] [2026-02-12T15:07:02.715Z] [functions[asia-northeast3-postVelocityToSlack]] function ignored because the firebasealerts.googleapis.com emulator does not exist or is not running.
+[info] i  functions: Loaded functions: postFatalToSlack, postNonFatalToSlack, postRegressionToSlack, postVelocityToSlack 
+[warn] ⚠  functions: The following emulators are not running, calls to these services will affect production: firestore, database, pubsub, storage, eventarc, tasks 
+[debug] [2026-02-12T15:07:24.353Z] shell:postNonFatalToSlack: trigger={"entryPoint":"postNonFatalToSlack","platform":"gcfv2","region":"asia-northeast3","name":"postNonFatalToSlack","id":"asia-northeast3-postNonFatalToSlack","codebase":"default","availableMemoryMb":256,"labels":{"EVENTARC_CLOUD_EVENT_SOURCE":"run-emulated.googleapis.com/projects/crashyltics-slack/locations/asia-northeast3/services/postNonFatalToSlack"},"timeoutSeconds":60,"secretEnvironmentVariables":[],"eventTrigger":{"eventType":"google.firebase.firebasealerts.alerts.v1.published","eventFilters":{"alerttype":"crashlytics.newNonfatalIssue"}}}
+[debug] [2026-02-12T15:07:24.358Z] shell:postNonFatalToSlack: opts={}, data={"payload":{"issue":{"id":"NF_01","title":"Non-Fatal Error","subtitle":"Caught exception in LoginView","appVersion":"1.0.2"}},"appId":"ios:test"}
+[debug] [2026-02-12T15:07:24.380Z] DEBUG: [worker-pool] addWorker(asia-northeast3-postNonFatalToSlack)
+[debug] [2026-02-12T15:07:24.381Z] DEBUG: [worker-pool] Adding worker with key asia-northeast3-postNonFatalToSlack, total=1
+[info] >  (node:35290) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead. {"user":"(node:35290) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.","metadata":{"emulator":{"name":"functions"},"function":{"name":"asia-northeast3-postNonFatalToSlack"},"extension":{},"message":"\u001b[90m> \u001b[39m (node:35290) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead."}}
+[info] >  (Use `node --trace-deprecation ...` to show where the warning was created) {"user":"(Use `node --trace-deprecation ...` to show where the warning was created)","metadata":{"emulator":{"name":"functions"},"function":{"name":"asia-northeast3-postNonFatalToSlack"},"extension":{},"message":"\u001b[90m> \u001b[39m (Use `node --trace-deprecation ...` to show where the warning was created)"}}
+[debug] [2026-02-12T15:07:25.228Z] DEBUG: [runtime-status] [35290] Resolved module firebase-admin {"declared":true,"installed":true,"version":"13.6.1","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-admin/lib/index.js"}
+[debug] [2026-02-12T15:07:25.230Z] DEBUG: [runtime-status] [35290] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.0.5","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-functions/lib/v2/index.js"}
+[debug] [2026-02-12T15:07:25.230Z] DEBUG: [runtime-status] [35290] Outgoing network have been stubbed. [{"name":"http","status":"mocked"},{"name":"http","status":"mocked"},{"name":"https","status":"mocked"},{"name":"https","status":"mocked"},{"name":"net","status":"mocked"}]
+[debug] [2026-02-12T15:07:25.231Z] DEBUG: [runtime-status] [35290] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.0.5","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-functions/lib/v2/index.js"}
+[debug] [2026-02-12T15:07:25.233Z] DEBUG: [runtime-status] [35290] Detected firebase-functions v7+, skipping legacy stubs.
+[debug] [2026-02-12T15:07:25.234Z] DEBUG: [runtime-status] [35290] Resolved module firebase-admin {"declared":true,"installed":true,"version":"13.6.1","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-admin/lib/index.js"}
+[debug] [2026-02-12T15:07:25.281Z] DEBUG: [runtime-status] [35290] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.0.5","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-functions/lib/v2/index.js"}
+[debug] [2026-02-12T15:07:25.475Z] DEBUG: [runtime-status] [35290] firebase-admin has been stubbed. {"adminResolution":{"declared":true,"installed":true,"version":"13.6.1","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-admin/lib/index.js"}}
+[debug] [2026-02-12T15:07:25.514Z] DEBUG: [runtime-status] [35290] Functions runtime initialized. {"cwd":"/Users/minguseo/Desktop/CrashlyticsReport/functions","node_version":"24.13.1"}
+[debug] [2026-02-12T15:07:25.515Z] DEBUG: [runtime-status] [35290] Listening to port: /var/folders/mg/h7rv6b991xb574_vvy3j87340000gn/T/fire_emu_8fd5fa68f32ea252.sock
+[debug] [2026-02-12T15:07:25.629Z] DEBUG: [worker-asia-northeast3-postNonFatalToSlack-dd1b4a47-792c-475b-b17d-eeef63740196]: IDLE
+[debug] [2026-02-12T15:07:25.650Z] DEBUG: [runtime-status] [35290] RunCloudEvent {"specversion":"1.0","datacontenttype":"application/json","id":"ceacaf0d-1a2d-4846-9b71-47fc8c39d401","type":"google.firebase.firebasealerts.alerts.v1.published","time":"2026-02-12T15:07:24.359Z","source":"","data":{"payload":{"issue":{"id":"NF_01","title":"Non-Fatal Error","subtitle":"Caught exception in LoginView","appVersion":"1.0.2"}},"appId":"ios:test"}}
+[info] >  {"severity":"INFO","message":"신규 비치명적 문제 발생 슬랙 전송 완료: 200"} {"user":{"severity":"INFO","message":"신규 비치명적 문제 발생 슬랙 전송 완료: 200"},"metadata":{"emulator":{"name":"functions"},"function":{"name":"asia-northeast3-postNonFatalToSlack"},"extension":{},"message":"\u001b[90m> \u001b[39m {\"severity\":\"INFO\",\"message\":\"신규 비치명적 문제 발생 슬랙 전송 완료: 200\"}"}}
+[debug] [2026-02-12T15:07:56.476Z] shell:postVelocityToSlack: trigger={"entryPoint":"postVelocityToSlack","platform":"gcfv2","region":"asia-northeast3","name":"postVelocityToSlack","id":"asia-northeast3-postVelocityToSlack","codebase":"default","availableMemoryMb":256,"labels":{"EVENTARC_CLOUD_EVENT_SOURCE":"run-emulated.googleapis.com/projects/crashyltics-slack/locations/asia-northeast3/services/postVelocityToSlack"},"timeoutSeconds":60,"secretEnvironmentVariables":[],"eventTrigger":{"eventType":"google.firebase.firebasealerts.alerts.v1.published","eventFilters":{"alerttype":"crashlytics.velocity"}}}
+[debug] [2026-02-12T15:07:56.476Z] shell:postVelocityToSlack: opts={}, data={"payload":{"issue":{"id":"VEL_01","title":"Velocity Alert!","subtitle":"High crash rate detected in last 15 mins","appVersion":"1.0.5"}},"appId":"ios:test"}
+[debug] [2026-02-12T15:07:56.486Z] DEBUG: [worker-pool] addWorker(asia-northeast3-postVelocityToSlack)
+[debug] [2026-02-12T15:07:56.486Z] DEBUG: [worker-pool] Adding worker with key asia-northeast3-postVelocityToSlack, total=1
+[info] >  (node:35303) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead. {"user":"(node:35303) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.","metadata":{"emulator":{"name":"functions"},"function":{"name":"asia-northeast3-postVelocityToSlack"},"extension":{},"message":"\u001b[90m> \u001b[39m (node:35303) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead."}}
+[info] >  (Use `node --trace-deprecation ...` to show where the warning was created) {"user":"(Use `node --trace-deprecation ...` to show where the warning was created)","metadata":{"emulator":{"name":"functions"},"function":{"name":"asia-northeast3-postVelocityToSlack"},"extension":{},"message":"\u001b[90m> \u001b[39m (Use `node --trace-deprecation ...` to show where the warning was created)"}}
+[debug] [2026-02-12T15:07:57.351Z] DEBUG: [runtime-status] [35303] Resolved module firebase-admin {"declared":true,"installed":true,"version":"13.6.1","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-admin/lib/index.js"}
+[debug] [2026-02-12T15:07:57.352Z] DEBUG: [runtime-status] [35303] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.0.5","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-functions/lib/v2/index.js"}
+[debug] [2026-02-12T15:07:57.353Z] DEBUG: [runtime-status] [35303] Outgoing network have been stubbed. [{"name":"http","status":"mocked"},{"name":"http","status":"mocked"},{"name":"https","status":"mocked"},{"name":"https","status":"mocked"},{"name":"net","status":"mocked"}]
+[debug] [2026-02-12T15:07:57.354Z] DEBUG: [runtime-status] [35303] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.0.5","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-functions/lib/v2/index.js"}
+[debug] [2026-02-12T15:07:57.355Z] DEBUG: [runtime-status] [35303] Detected firebase-functions v7+, skipping legacy stubs.
+[debug] [2026-02-12T15:07:57.356Z] DEBUG: [runtime-status] [35303] Resolved module firebase-admin {"declared":true,"installed":true,"version":"13.6.1","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-admin/lib/index.js"}
+[debug] [2026-02-12T15:07:57.403Z] DEBUG: [runtime-status] [35303] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.0.5","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-functions/lib/v2/index.js"}
+[debug] [2026-02-12T15:07:57.588Z] DEBUG: [runtime-status] [35303] firebase-admin has been stubbed. {"adminResolution":{"declared":true,"installed":true,"version":"13.6.1","resolution":"/Users/minguseo/Desktop/CrashlyticsReport/functions/node_modules/firebase-admin/lib/index.js"}}
+[debug] [2026-02-12T15:07:57.630Z] DEBUG: [runtime-status] [35303] Functions runtime initialized. {"cwd":"/Users/minguseo/Desktop/CrashlyticsReport/functions","node_version":"24.13.1"}
+[debug] [2026-02-12T15:07:57.631Z] DEBUG: [runtime-status] [35303] Listening to port: /var/folders/mg/h7rv6b991xb574_vvy3j87340000gn/T/fire_emu_9fd53993def19b0e.sock
+[debug] [2026-02-12T15:07:57.715Z] DEBUG: [worker-asia-northeast3-postVelocityToSlack-98a3018f-a9c2-4ab0-892b-deb38a704743]: IDLE
+[debug] [2026-02-12T15:07:57.734Z] DEBUG: [runtime-status] [35303] RunCloudEvent {"specversion":"1.0","datacontenttype":"application/json","id":"408e3572-eada-44ab-8a16-eaaab7133919","type":"google.firebase.firebasealerts.alerts.v1.published","time":"2026-02-12T15:07:56.477Z","source":"","data":{"payload":{"issue":{"id":"VEL_01","title":"Velocity Alert!","subtitle":"High crash rate detected in last 15 mins","appVersion":"1.0.5"}},"appId":"ios:test"}}
+[info] >  {"severity":"INFO","message":"반복되는 문제 (폭주 알림) 슬랙 전송 완료: 200"} {"user":{"severity":"INFO","message":"반복되는 문제 (폭주 알림) 슬랙 전송 완료: 200"},"metadata":{"emulator":{"name":"functions"},"function":{"name":"asia-northeast3-postVelocityToSlack"},"extension":{},"message":"\u001b[90m> \u001b[39m {\"severity\":\"INFO\",\"message\":\"반복되는 문제 (폭주 알림) 슬랙 전송 완료: 200\"}"}}
