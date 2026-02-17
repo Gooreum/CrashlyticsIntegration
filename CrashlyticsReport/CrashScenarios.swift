@@ -46,40 +46,61 @@ class UserService {
     
     /// 크래시 1: Optional 강제 언래핑 — 로그인 전 사용자 접근
     func getCurrentUserName() -> String {
-        return currentUser!.name  // currentUser가 nil이면 크래시
+        guard let user = currentUser else {
+            return "로그인되지 않음"
+        }
+        return user.name
     }
     
     /// 크래시 2: 옵셔널 체이닝 없이 중첩 접근
     func getFirstFriendEmail() -> String {
-        let friends = currentUser!.friends!  // 이중 강제 언래핑
-        return friends[0].email!             // 삼중 강제 언래핑 + 인덱스 접근
+        guard let user = currentUser,
+              let friends = user.friends,
+              !friends.isEmpty,
+              let email = friends[0].email else {
+            return "친구 이메일 없음"
+        }
+        return email
     }
     
     /// 크래시 3: Dictionary 강제 언래핑
     func getCachedUser(id: String) -> User {
-        return cachedUsers[id]!  // 키가 없으면 크래시
+        guard let user = cachedUsers[id] else {
+            return User(id: "unknown", name: "캐시 없음", email: nil, profileImageURL: nil, friends: nil)
+        }
+        return user
     }
 }
 
 class CartService {
     static let shared = CartService()
     private var items: [Product] = []
+    private let lock = NSLock()
     
     /// 크래시 4: 빈 배열에서 reduce 후 나누기 — Division 관련
     func getAveragePrice() -> Double {
+        guard !items.isEmpty else {
+            return 0.0
+        }
         let total = items.reduce(0.0) { $0 + $1.price }
-        return total / Double(items.count)  // items가 비어있으면 NaN, Int로 변환 시 크래시 가능
+        return total / Double(items.count)
     }
     
     /// 크래시 5: 범위 초과 접근 — 할인된 상품 필터링 후
     func getMostDiscountedItem() -> Product {
         let discounted = items.filter { $0.discountRate != nil }
-        return discounted[0]  // 할인 상품이 없으면 크래시
+        guard let firstItem = discounted.first else {
+            return Product(id: "none", name: "할인 상품 없음", price: 0, discountRate: nil, stock: 0, variants: nil)
+        }
+        return firstItem
     }
     
     /// 크래시 6: 강제 캐스팅
     func processPayment(method: Any) {
-        let cardNumber = method as! String  // method가 String이 아니면 크래시
+        guard let cardNumber = method as? String else {
+            print("잘못된 결제 수단 타입")
+            return
+        }
         print("Processing payment with card: \(cardNumber)")
     }
 }
@@ -87,34 +108,41 @@ class CartService {
 class OrderService {
     static let shared = OrderService()
     private var orders: [Order] = []
+    private let queue = DispatchQueue(label: "com.crashlytics.orders", attributes: .concurrent)
     
     /// 크래시 7: 멀티스레드 — 메인스레드 외에서 배열 동시 접근
     func fetchOrdersAsync(completion: @escaping ([Order]) -> Void) {
         DispatchQueue.global(qos: .background).async { [weak self] in
-            // 백그라운드에서 orders 배열 수정
-            self?.orders.append(Order(
-                id: UUID().uuidString,
-                userId: "test",
-                products: nil,
-                totalPrice: 0,
-                couponCode: nil,
-                shippingAddress: nil
-            ))
+            guard let self = self else { return }
             
-            // 동시에 다른 스레드에서도 접근하면 크래시
-            DispatchQueue.global().async {
-                self?.orders.removeAll()  // 동시 수정 → EXC_BAD_ACCESS
+            // 백그라운드에서 orders 배열 수정 (스레드 세이프하게)
+            self.queue.async(flags: .barrier) {
+                self.orders.append(Order(
+                    id: UUID().uuidString,
+                    userId: "test",
+                    products: nil,
+                    totalPrice: 0,
+                    couponCode: nil,
+                    shippingAddress: nil
+                ))
             }
             
-            completion(self?.orders ?? [])
+            // 읽기 작업
+            self.queue.async {
+                let currentOrders = self.orders
+                completion(currentOrders)
+            }
         }
     }
     
     /// 크래시 8: 옵셔널 체이닝 없이 주문 상세 접근
     func getOrderShippingLabel(orderId: String) -> String {
-        let order = orders.first { $0.id == orderId }
-        let address = order!.shippingAddress!  // 주문 없거나 주소 없으면 크래시
-        let products = order!.products!        // products가 nil이면 크래시
+        guard let order = orders.first(where: { $0.id == orderId }),
+              let address = order.shippingAddress,
+              let products = order.products,
+              !products.isEmpty else {
+            return "주문 정보 없음"
+        }
         let firstProduct = products[0].name
         return "\(firstProduct) → \(address)"
     }
@@ -125,15 +153,25 @@ class NetworkManager {
     
     /// 크래시 9: 강제 URL 변환 — 특수문자 포함 시
     func fetchData(from urlString: String) {
-        let url = URL(string: urlString)!  // 잘못된 URL이면 크래시
+        guard let encodedString = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: encodedString) else {
+            print("잘못된 URL: \(urlString)")
+            return
+        }
         print("Fetching from \(url)")
     }
     
     /// 크래시 10: JSON 디코딩 — 타입 불일치
     func parseResponse(data: Data) -> [String: Any] {
-        let json = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let userId = json["user_id"] as! Int      // String일 수 있음 → 크래시
-        let balance = json["balance"] as! Double   // null일 수 있음 → 크래시
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            print("JSON 파싱 실패")
+            return [:]
+        }
+        
+        // 안전한 타입 변환
+        let userId: Any = json["user_id"] ?? "unknown"
+        let balance: Any = json["balance"] ?? 0.0
+        
         print("User \(userId), balance: \(balance)")
         return json
     }
