@@ -21,3 +21,5 @@ Swift Package Manager
 
 CocoaPods
 Pods/ Podfile.lock
+CrashlyticsReport/Assets.xcassets/.DS_Store
+CrashlyticsReport/Assets.xcassets
