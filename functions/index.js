@@ -113,44 +113,159 @@ function parseIosStacktrace(stacktrace) {
 function extractFileInfoFromIssue(issue) {
   const files = [];
   const combined = `${issue.title || ""} ${issue.subtitle || ""}`;
+
+  // 패턴 1: File.swift:123 (콜론으로 연결된 형식)
   const fileLinePattern = /(\w+\.swift):(\d+)/g;
   let match;
   while ((match = fileLinePattern.exec(combined)) !== null) {
     files.push({ file: match[1], line: parseInt(match[2]) });
   }
-  const classPattern = /(\w+)\.\w+\(/g;
-  while ((match = classPattern.exec(combined)) !== null) {
-    const inferredFile = `${match[1]}.swift`;
-    if (!files.some((f) => f.file === inferredFile)) {
-      files.push({ file: inferredFile, line: null });
+
+  // 패턴 2: File.swift ... line 123 (Crashlytics 일반 형식)
+  const fileLineSeparatePattern = /(\w+\.swift)\b.*?\bline\s+(\d+)/gi;
+  while ((match = fileLineSeparatePattern.exec(combined)) !== null) {
+    if (!files.some((f) => f.file === match[1])) {
+      files.push({ file: match[1], line: parseInt(match[2]) });
     }
   }
+
+  // 패턴 3: File.swift 단독 (라인 번호 없이)
+  const fileOnlyPattern = /(\w+\.swift)\b/g;
+  while ((match = fileOnlyPattern.exec(combined)) !== null) {
+    if (!files.some((f) => f.file === match[1])) {
+      files.push({ file: match[1], line: null });
+    }
+  }
+
+  // 패턴 4: ClassName.methodName( → ClassName.swift 추론
+  // 단, 패턴 1~3에서 이미 실제 .swift 파일을 찾았으면 추론을 건너뜀
+  // (ChatService.getLastMessage() → ChatService.swift 같은 불필요한 추론 방지)
+  if (files.length === 0) {
+    const classPattern = /(\w+)\.\w+\(/g;
+    while ((match = classPattern.exec(combined)) !== null) {
+      const inferredFile = `${match[1]}.swift`;
+      if (!files.some((f) => f.file === inferredFile)) {
+        files.push({ file: inferredFile, line: null });
+      }
+    }
+  }
+
+  logger.log("📋 extractFileInfoFromIssue 결과:", { combined: combined.slice(0, 200), files });
   return files;
 }
 
 // =====================================================
 // 2. GitHub 소스 코드 조회
 // =====================================================
+
+/**
+ * 하이브리드 전략으로 GitHub 소스 코드를 조회합니다.
+ *
+ * 1차: 전체 경로를 이미 알면 repos.getContent 직접 조회 (API 1회)
+ * 2차: search.code로 검색 (API 1회)
+ * 3차: Git Tree로 폴백 — 전역 캐시 (인스턴스 수명 동안 5분 TTL)
+ */
+
+// 전역 Git Tree 캐시 (인스턴스가 살아있는 동안 유지)
+let treeCache = { files: null, timestamp: 0 };
+const TREE_CACHE_TTL = 5 * 60 * 1000; // 5분
+
 async function fetchSourceFromGithub(token, fileInfo) {
   const octokit = new Octokit({ auth: token });
+  const { owner, repo, defaultBranch } = CONFIG.github;
   const results = [];
 
-  for (const { file, line } of fileInfo) {
+  async function getTreeFiles() {
+    const now = Date.now();
+    if (treeCache.files && (now - treeCache.timestamp) < TREE_CACHE_TTL) {
+      logger.log(`📂 Git Tree 캐시 사용 (${treeCache.files.length}개 파일, ${Math.round((now - treeCache.timestamp) / 1000)}초 전)`);
+      return treeCache.files;
+    }
+    const { data: refData } = await octokit.rest.git.getRef({
+      owner, repo,
+      ref: `heads/${defaultBranch}`,
+    });
+    const { data: tree } = await octokit.rest.git.getTree({
+      owner, repo,
+      tree_sha: refData.object.sha,
+      recursive: "true",
+    });
+    treeCache.files = tree.tree.filter((t) => t.type === "blob").map((t) => t.path);
+    treeCache.timestamp = now;
+    logger.log(`📂 Git Tree 신규 조회: ${treeCache.files.length}개 파일`);
+    return treeCache.files;
+  }
+
+  for (const item of fileInfo) {
+    const file = item.file || item.filePath;
+    const line = item.line;
+
+    if (!file) {
+      logger.warn("⚠️ 파일명이 없는 항목 건너뜀:", item);
+      continue;
+    }
+
     try {
-      const searchResult = await octokit.rest.search.code({
-        q: `filename:${file} repo:${CONFIG.github.owner}/${CONFIG.github.repo}`,
-        per_page: 1,
-      });
-      if (searchResult.data.total_count === 0) {
+      let filePath = null;
+
+      // === 전략 1: 전체 경로면 직접 조회 (API 1회, 가장 빠름) ===
+      if (file.includes("/")) {
+        try {
+          await octokit.rest.repos.getContent({ owner, repo, path: file, ref: defaultBranch });
+          filePath = file;
+          logger.log(`✅ [직접조회] ${file}`);
+        } catch {
+          // 경로가 틀릴 수 있음 → 다음 전략으로
+        }
+      }
+
+      // === 전략 2: search.code 검색 ===
+      if (!filePath) {
+        try {
+          const searchResult = await octokit.rest.search.code({
+            q: `filename:${file.split("/").pop()} repo:${owner}/${repo}`,
+            per_page: 3,
+          });
+          if (searchResult.data.total_count > 0) {
+            // 전체 경로가 포함된 결과 우선, 없으면 첫 번째 결과
+            const exactMatch = searchResult.data.items.find((i) => i.path === file);
+            filePath = exactMatch ? exactMatch.path : searchResult.data.items[0].path;
+            logger.log(`✅ [search.code] ${file} → ${filePath}`);
+          }
+        } catch (searchError) {
+          logger.warn(`⚠️ search.code 실패 (${file}): ${searchError.message}`);
+        }
+      }
+
+      // === 전략 3: Git Tree 폴백 (최후 수단) ===
+      if (!filePath) {
+        try {
+          const allFiles = await getTreeFiles();
+          const fileName = file.split("/").pop();
+          const matchingPaths = allFiles.filter(
+            (p) => p === file || p.endsWith(`/${fileName}`)
+          );
+          if (matchingPaths.length > 0) {
+            filePath = matchingPaths[0];
+            logger.log(`✅ [Git Tree 폴백] ${file} → ${filePath}`);
+          }
+        } catch (treeError) {
+          logger.error(`❌ Git Tree 폴백도 실패: ${treeError.message}`);
+        }
+      }
+
+      // 어떤 전략으로도 파일을 못 찾은 경우
+      if (!filePath) {
+        logger.warn(`❌ 파일 못 찾음: ${file} (모든 전략 실패)`);
         results.push({ file, line, content: null, fullContent: null, error: "파일을 찾을 수 없음" });
         continue;
       }
-      const filePath = searchResult.data.items[0].path;
+
+      // 파일 내용 조회
       const fileContent = await octokit.rest.repos.getContent({
-        owner: CONFIG.github.owner,
-        repo: CONFIG.github.repo,
+        owner, repo,
         path: filePath,
-        ref: CONFIG.github.defaultBranch,
+        ref: defaultBranch,
       });
       const content = Buffer.from(fileContent.data.content, "base64").toString("utf-8");
       const lines = content.split("\n");
@@ -176,8 +291,7 @@ async function fetchSourceFromGithub(token, fileInfo) {
       let recentCommits = "";
       try {
         const commits = await octokit.rest.repos.listCommits({
-          owner: CONFIG.github.owner,
-          repo: CONFIG.github.repo,
+          owner, repo,
           path: filePath,
           per_page: 5,
         });
@@ -193,8 +307,8 @@ async function fetchSourceFromGithub(token, fileInfo) {
         filePath,
         line,
         content: excerpt,
-        fullContent: content,  // PR 생성 시 원본 전체 코드 필요
-        sha: fileContent.data.sha,  // 파일 업데이트 시 필요
+        fullContent: content,
+        sha: fileContent.data.sha,
         recentCommits,
         error: null,
       });
@@ -314,7 +428,10 @@ ${filesContext}
 
 ---
 
-위 크래시를 수정한 **전체 파일 코드**를 생성해주세요.
+위 크래시를 수정해주세요.
+
+⚠️ 중요: 토큰 절약을 위해 **변경이 필요한 부분만** 포함해주세요.
+fixedCode에는 수정된 **전체 파일 코드**를 넣되, 파일이 너무 길면 크래시와 무관한 부분은 원본 그대로 유지하세요.
 
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요.
 
@@ -322,13 +439,13 @@ ${filesContext}
 {
   "fixes": [
     {
-      "filePath": "수정할 파일의 정확한 경로 (예: CrashlyticsIntegration/AppView2.swift)",
-      "fixedCode": "수정된 전체 파일 코드 (문자열)",
-      "summary": "이 파일에서 변경한 내용 한줄 요약"
+      "filePath": "수정할 파일의 정확한 경로",
+      "fixedCode": "수정된 전체 파일 코드",
+      "summary": "변경 내용 한줄 요약"
     }
   ],
-  "prTitle": "크래시 수정에 대한 간결한 PR 제목",
-  "prDescription": "수정 내용에 대한 상세 설명 (Markdown)"
+  "prTitle": "간결한 PR 제목",
+  "prDescription": "수정 내용 상세 설명 (Markdown)"
 }
 \`\`\`
 
@@ -341,16 +458,54 @@ ${filesContext}
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-5-20250929",
-      max_tokens: 4096,
+      max_tokens: 16384,
       messages: [{ role: "user", content: prompt }],
     });
 
+    // 응답이 잘렸는지 확인
+    if (response.stop_reason === "max_tokens") {
+      logger.warn("⚠️ Claude 응답이 max_tokens로 잘림 — 토큰 부족");
+    }
+
     const text = response.content[0].text;
+    logger.log("🤖 Claude 응답 길이:", text.length, "stop_reason:", response.stop_reason);
 
     // JSON 파싱 (```json ... ``` 펜스 제거)
+    let jsonStr;
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : text;
-    const parsed = JSON.parse(jsonStr.trim());
+    if (jsonMatch) {
+      jsonStr = jsonMatch[1];
+    } else {
+      // 펜스 없이 바로 JSON인 경우
+      jsonStr = text;
+    }
+
+    // 잘린 JSON 복구 시도
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr.trim());
+    } catch (parseError) {
+      logger.warn("⚠️ JSON 파싱 실패, 복구 시도:", parseError.message);
+
+      // 잘린 JSON 복구: 열린 문자열/배열/객체 닫기
+      let repaired = jsonStr.trim();
+      // 잘린 문자열 닫기
+      const openQuotes = (repaired.match(/"/g) || []).length;
+      if (openQuotes % 2 !== 0) repaired += '"';
+      // 닫히지 않은 배열/객체 닫기
+      const openBraces = (repaired.match(/{/g) || []).length - (repaired.match(/}/g) || []).length;
+      const openBrackets = (repaired.match(/\[/g) || []).length - (repaired.match(/]/g) || []).length;
+      for (let i = 0; i < openBrackets; i++) repaired += "]";
+      for (let i = 0; i < openBraces; i++) repaired += "}";
+
+      try {
+        parsed = JSON.parse(repaired);
+        logger.log("✅ JSON 복구 성공");
+      } catch {
+        logger.error("❌ JSON 복구도 실패, 원본 길이:", text.length);
+        return null;
+      }
+    }
 
     // 유효성 검증
     if (!parsed.fixes || !Array.isArray(parsed.fixes) || parsed.fixes.length === 0) {
@@ -583,20 +738,30 @@ async function postInitialAlert(botToken, event, typeLabel, emoji) {
 async function postAnalysisThread(botToken, threadTs, analysis, issue, sourceResults) {
   const slack = new WebClient(botToken);
 
+  const analysisText = analysis || "분석을 수행할 수 없었습니다. 데이터가 부족합니다.";
+
+  // Slack section block은 3000자 제한 — 긴 분석은 여러 블록으로 분할
+  const SLACK_BLOCK_LIMIT = 2900; // 여유분 포함
+  const analysisChunks = [];
+  for (let i = 0; i < analysisText.length; i += SLACK_BLOCK_LIMIT) {
+    analysisChunks.push(analysisText.slice(i, i + SLACK_BLOCK_LIMIT));
+  }
+
   const blocks = [
     {
       type: "header",
       text: { type: "plain_text", text: "🤖 AI 크래시 분석 결과", emoji: true },
     },
     { type: "divider" },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: analysis || "분석을 수행할 수 없었습니다. 데이터가 부족합니다.",
-      },
-    },
   ];
+
+  // 분석 텍스트 블록들 추가
+  for (const chunk of analysisChunks) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: chunk },
+    });
+  }
 
   // 소스 코드 링크
   if (sourceResults && sourceResults.length > 0) {
@@ -706,25 +871,45 @@ async function crashAnalysisPipeline(event, typeLabel, emoji) {
   const threadTs = await postInitialAlert(botToken, event, typeLabel, emoji);
   if (!threadTs) return;
 
-  // Step 2: 이슈 정보에서 파일/라인 추출
-  const fileInfo = extractFileInfoFromIssue(issue);
-  logger.log("추출된 파일 정보:", fileInfo);
+  try {
+    // Step 2: 이슈 정보에서 파일/라인 추출
+    const fileInfo = extractFileInfoFromIssue(issue);
+    logger.log("추출된 파일 정보:", fileInfo);
 
-  // Step 3: GitHub에서 소스 코드 조회
-  let sourceResults = [];
-  if (fileInfo.length > 0) {
-    sourceResults = await fetchSourceFromGithub(githubToken, fileInfo);
-    logger.log("소스 코드 조회 결과:", sourceResults.map((r) => ({
-      file: r.file,
-      found: !r.error,
-    })));
+    // Step 3: GitHub에서 소스 코드 조회
+    let sourceResults = [];
+    if (fileInfo.length > 0) {
+      sourceResults = await fetchSourceFromGithub(githubToken, fileInfo);
+      logger.log("소스 코드 조회 결과:", sourceResults.map((r) => ({
+        file: r.file,
+        found: !r.error,
+      })));
+    }
+
+    // Step 4: Claude AI 심층 분석 (재시도 1회 포함)
+    let analysis = await analyzeWithClaude(anthropicKey, issue, typeLabel, sourceResults);
+    if (!analysis) {
+      logger.warn("⚠️ Claude 분석 첫 번째 시도 실패, 5초 후 재시도...");
+      await new Promise((r) => setTimeout(r, 5000));
+      analysis = await analyzeWithClaude(anthropicKey, issue, typeLabel, sourceResults);
+    }
+
+    // Step 5: 분석 결과를 쓰레드로 전송
+    await postAnalysisThread(botToken, threadTs, analysis, issue, sourceResults);
+  } catch (error) {
+    logger.error("파이프라인 실패:", error.message, error.stack);
+    // 실패해도 Slack 쓰레드에 에러 메시지 표시
+    try {
+      const slack = new WebClient(botToken);
+      await slack.chat.postMessage({
+        channel: CONFIG.slack.channelId,
+        thread_ts: threadTs,
+        text: `❌ AI 분석 중 오류가 발생했습니다: ${error.message}\n\n수동으로 확인해주세요.`,
+      });
+    } catch {
+      logger.error("에러 메시지 전송도 실패");
+    }
   }
-
-  // Step 4: Claude AI 심층 분석
-  const analysis = await analyzeWithClaude(anthropicKey, issue, typeLabel, sourceResults);
-
-  // Step 5: 분석 결과를 쓰레드로 전송
-  await postAnalysisThread(botToken, threadTs, analysis, issue, sourceResults);
 }
 
 // =====================================================
@@ -732,6 +917,8 @@ async function crashAnalysisPipeline(event, typeLabel, emoji) {
 // =====================================================
 const allSecrets = {
   secrets: [SLACK_BOT_TOKEN, SLACK_WEBHOOK, ANTHROPIC_KEY, GITHUB_TOKEN],
+  timeoutSeconds: 300,   // 5분 (Git Tree 조회 + Claude 분석에 충분한 시간)
+  memory: "512MiB",      // Git Tree 17K+ 파일 처리에 여유 메모리
 };
 
 exports.postFatalToSlack = onNewFatalIssuePublished(allSecrets, async (event) => {
@@ -1062,6 +1249,147 @@ exports.testCrashAlert = onRequest(
         subtitle: "AppView2.swift - closure #3 in closure #1 in AppView2.body.getter",
         appVersion: "1.0.2",
         description: "AppView2: array[4] 접근, 크기 3 (약 41번 줄)",
+      },
+      // --- CrashScenarios.swift 추가 시나리오 (11~30) ---
+      {
+        id: "empty_last_message",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - ChatService.getLastMessage() line 180",
+        appVersion: "1.0.2",
+        description: "크래시11: 빈 messages 배열에서 .last! 강제 언래핑",
+      },
+      {
+        id: "string_index_overflow",
+        title: "Fatal error: String index is out of bounds",
+        subtitle: "CrashScenarios.swift - ChatService.getMessagePreview(messageId:) line 187",
+        appVersion: "1.0.2",
+        description: "크래시12: 50자 미만 문자열에서 offsetBy: 50 접근",
+      },
+      {
+        id: "remove_at_invalid",
+        title: "Fatal error: Index out of range",
+        subtitle: "CrashScenarios.swift - ChatService.removeTypingUser(at:) line 193",
+        appVersion: "1.0.2",
+        description: "크래시13: 빈 배열에서 remove(at: 5) 호출",
+      },
+      {
+        id: "invalid_regex",
+        title: "NSInternalInconsistencyException",
+        subtitle: "CrashScenarios.swift - SearchService.searchWithRegex(pattern:in:) line 201",
+        appVersion: "1.0.2",
+        description: "크래시14: 잘못된 정규식 패턴 [invalid(regex 으로 NSRegularExpression 생성 실패",
+      },
+      {
+        id: "search_cache_miss",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - SearchService.getTopSearchResult(query:) line 209",
+        appVersion: "1.0.2",
+        description: "크래시15: 캐시에 없는 검색어 Dictionary 강제 언래핑 + 빈 배열 [0] 접근",
+      },
+      {
+        id: "pagination_overflow",
+        title: "Fatal error: Range requires lowerBound <= upperBound",
+        subtitle: "CrashScenarios.swift - SearchService.getSearchPage(query:page:pageSize:) line 216",
+        appVersion: "1.0.2",
+        description: "크래시16: page=999 페이지네이션 범위 초과 Array 슬라이싱",
+      },
+      {
+        id: "nil_deeplink",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - NotificationService.handleNotification(_:) line 225",
+        appVersion: "1.0.2",
+        description: "크래시17: nil 딥링크 + 잘못된 URL 강제 언래핑 + pathComponents 범위 초과",
+      },
+      {
+        id: "payload_type_error",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - NotificationService.getNotificationTitle(_:) line 233",
+        appVersion: "1.0.2",
+        description: "크래시18: payload 딕셔너리 Int→String, String→Int 강제 캐스팅 실패",
+      },
+      {
+        id: "badge_overflow",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - NotificationService.incrementBadge(for:) line 240",
+        appVersion: "1.0.2",
+        description: "크래시19: 존재하지 않는 키 강제 언래핑 + Int.max 오버플로우",
+      },
+      {
+        id: "empty_shuffle",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - MediaService.getShuffledTrack() line 250",
+        appVersion: "1.0.2",
+        description: "크래시20: 빈 playlist에서 .randomElement()! 강제 언래핑",
+      },
+      {
+        id: "negative_index",
+        title: "Fatal error: Index out of range",
+        subtitle: "CrashScenarios.swift - MediaService.getPreviousTrack(currentIndex:) line 256",
+        appVersion: "1.0.2",
+        description: "크래시21: currentIndex=0에서 -1 → 음수 인덱스 배열 접근",
+      },
+      {
+        id: "int_exact_fail",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - MediaService.getTrackProgress(current:total:) line 262",
+        appVersion: "1.0.2",
+        description: "크래시22: 40.944...% 소수점을 Int(exactly:)!로 변환 실패",
+      },
+      {
+        id: "settings_type_mismatch",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - ProfileService.getNotificationPreference() line 271",
+        appVersion: "1.0.2",
+        description: "크래시23: 존재하지 않는 설정 키 강제 언래핑 + 타입 불일치 as! Bool",
+      },
+      {
+        id: "empty_languages",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - ProfileService.getPrimaryLanguage() line 278",
+        appVersion: "1.0.2",
+        description: "크래시24: 빈 언어 배열 .first! 강제 언래핑",
+      },
+      {
+        id: "string_to_int_fail",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - ProfileService.getUserAge() line 284",
+        appVersion: "1.0.2",
+        description: "크래시25: 'twenty' 문자열을 Int()!로 변환 실패",
+      },
+      {
+        id: "cache_miss_image",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - CacheManager.getCachedImage(key:) line 293",
+        appVersion: "1.0.2",
+        description: "크래시26: NSCache에 없는 키 강제 언래핑 + UIImage 강제 캐스팅",
+      },
+      {
+        id: "file_not_found",
+        title: "NSCocoaErrorDomain (260)",
+        subtitle: "CrashScenarios.swift - CacheManager.getCacheFileSize(at:) line 299",
+        appVersion: "1.0.2",
+        description: "크래시27: 빈 배열 인덱스 접근 + 존재하지 않는 파일 경로 attributesOfItem 실패",
+      },
+      {
+        id: "date_format_mismatch",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - DateFormatterService.parseServerDate(dateString:) line 308",
+        appVersion: "1.0.2",
+        description: "크래시28: ISO8601 포맷에 맞지 않는 날짜 문자열 강제 언래핑",
+      },
+      {
+        id: "date_calc_fail",
+        title: "EXC_BREAKPOINT",
+        subtitle: "CrashScenarios.swift - DateFormatterService.getDaysBetween(start:end:) line 315",
+        appVersion: "1.0.2",
+        description: "크래시29: 파싱 불가능한 날짜 문자열 'not-a-date' 강제 언래핑",
+      },
+      {
+        id: "codable_infinity",
+        title: "NSInvalidArgumentException",
+        subtitle: "CrashScenarios.swift - DeepCopyService.deepCopy(object:) line 325",
+        appVersion: "1.0.2",
+        description: "크래시30: Double.infinity를 JSONEncoder로 인코딩 시 try! 실패",
       },
     ];
 
