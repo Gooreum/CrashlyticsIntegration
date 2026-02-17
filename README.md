@@ -4,7 +4,7 @@
 
 Firebase Crashlytics에서 감지된 iOS 앱 크래시를 자동으로 분석하고, Slack에 알림을 보내며, Claude AI가 원인을 분석하고 수정 코드까지 생성하여 GitHub PR을 자동으로 만들어주는 종합 자동화 봇.
 
-**기간:** 2026년 2월 12일 ~ 2월 14일  
+**기간:** 2026년 2월 12일 ~ 2월 17일  
 **기술 스택:** Firebase Cloud Functions (Gen 2), Slack Web API, GitHub API (Octokit), Claude API (Anthropic), Node.js  
 **대상 플랫폼:** iOS (Swift)
 
@@ -99,55 +99,95 @@ Slack 쓰레드에 분석 결과 + 액션 버튼 게시
 
 ---
 
-### 디버깅 및 문제 해결 과정
+## 디버깅 및 문제 해결 과정
 
-PR 생성 기능이 동작하지 않아 여러 단계에 걸쳐 원인을 추적하고 해결했습니다.
+### 이슈 1: Cloud Functions Gen 2 인증 문제
 
-#### 이슈 1: Slack 3초 타임아웃
-
-**증상:** PR 생성 버튼 클릭 후 아무 반응 없음  
-**원인:** Slack은 인터랙션 응답을 3초 이내에 받아야 하는데, GitHub 조회 + Claude API + PR 생성이 끝난 후에야 `res.status(200).send("ok")`를 보내고 있었음  
-**해결:** `res.send()`를 즉시 호출하고 비동기로 작업 수행 → 이후 Gen 2 호환 문제로 다시 수정
-
-#### 이슈 2: Cloud Functions Gen 2 인증 문제
-
-**증상:** `slackInteraction` 함수 로그에 호출 기록이 전혀 없음 (배포 로그만 존재)  
-**원인:** Gen 2 Cloud Functions는 기본적으로 인증된 요청만 허용. Slack은 인증 없이 요청하므로 403으로 거부됨  
+**증상:** `slackInteraction` 함수 로그에 호출 기록이 전혀 없음  
+**원인:** Gen 2는 기본적으로 인증된 요청만 허용. Slack은 인증 없이 요청하므로 403 거부  
 **해결:** Cloud Run 콘솔에서 `allUsers`에 `Cloud Run Invoker` 역할 부여
-```bash
-gcloud functions add-invoker-policy-binding slackInteraction \
-  --region=asia-northeast3 --member="allUsers"
+
+### 이슈 2: Gen 2에서 res.send() 후 비동기 코드 미실행
+
+**증상:** 함수 호출은 되지만 후속 작업이 실행 안 됨  
+**원인:** Gen 2(Cloud Run 기반)에서 `res.send()` 이후 CPU 스로틀링  
+**해결:** `res.send()`를 함수 맨 끝으로 이동
+
+### 이슈 3: 파일명 파싱 실패
+
+**증상:** "🔀 수정 PR 생성" 버튼이 표시되지 않음  
+**원인:** `File.swift ... line 53` 형식을 인식 못함 (콜론 형식만 지원)  
+**해결:** 4가지 파싱 패턴으로 확장 + 패턴 4(클래스명 추론)는 실제 .swift 파일을 못 찾았을 때만 작동하도록 최적화
+
+### 이슈 4: GitHub Code Search API 인덱싱 문제
+
+**증상:** 파일이 레포에 있는데도 `found: false`  
+**원인:** `search.code`는 인덱싱에 의존, 소규모 레포는 인덱싱 안 될 수 있음  
+**해결:** 하이브리드 3단계 검색 전략 + 전역 TTL 캐시 (상세 내용 아래)
+
+### 이슈 5: 인터랙션 핸들러 데이터 키 불일치
+
+**증상:** PR 버튼 클릭 → "수정 코드를 생성할 수 없었습니다"  
+**원인:** 버튼은 `{ filePath }`, 함수는 `{ file }` 기대  
+**해결:** `const file = item.file || item.filePath`로 양쪽 호환
+
+### 이슈 6: Claude 응답 JSON 토큰 초과로 잘림
+
+**증상:** "Unterminated string in JSON at position 10833"  
+**원인:** `max_tokens: 4096` 부족으로 JSON 중간 잘림  
+**해결:**
+- `max_tokens` 4096 → **16384** (4배)
+- `stop_reason === "max_tokens"` 잘림 감지
+- 잘린 JSON 자동 복구 (열린 따옴표/중괄호/대괄호 닫기)
+
+### 이슈 7: Slack 블록 3000자 제한
+
+**증상:** 동시 크래시 시 AI 분석 결과 Slack 전송 실패  
+**원인:** Slack section block text 3000자 제한 초과  
+**해결:** 2900자 단위 자동 분할, 여러 블록으로 전송
+
+### 이슈 8: 동시 크래시 시 타임아웃 및 안정성
+
+**증상:** 동시 3개 크래시 시 일부 분석 실패  
+**원인:** 기본 타임아웃 60초, 메모리 256MB 부족  
+**해결:**
+- `timeoutSeconds: 300`, `memory: "512MiB"`
+- Claude 분석 실패 시 5초 대기 후 자동 재시도 1회
+- 에러 시 Slack 쓰레드에 에러 메시지 표시 (무한 대기 방지)
+
+---
+
+## GitHub 소스 코드 검색 전략 (하이브리드)
+
+### 진화 과정
+
+| 버전 | 방식 | 문제 |
+|------|------|------|
+| v1 | `search.code` 단독 | 인덱싱 안 된 파일 못 찾음 |
+| v2 | Git Tree 전체 조회 | 매번 17K 파일 목록 API 호출 |
+| v3 | sourceDirs 직접 조회 | 폴더 변경 시 코드 수정 필요 |
+| **v4 (최종)** | **하이브리드 3단계 + 전역 TTL 캐시** | **자동, 효율적** |
+
+### 최종 전략 (v4)
+
+```
+전략 1: 전체 경로 → repos.getContent 직접 조회 (API 1회)
+  ↓ 실패 시
+전략 2: search.code 검색 (API 1회)
+  ↓ 실패 시
+전략 3: Git Tree 폴백 — 전역 TTL 캐시 (캐시 히트면 0회, 미스면 2회)
 ```
 
-#### 이슈 3: Gen 2에서 res.send() 후 비동기 코드 미실행
+### 전역 Git Tree 캐시
 
-**증상:** 함수 호출은 되지만 후속 작업(GitHub 조회, Claude API)이 실행 안 됨  
-**원인:** Gen 2(Cloud Run 기반)에서는 `res.send()` 이후 CPU가 스로틀링되어 비동기 코드 실행이 보장되지 않음  
-**해결:** `res.send()`를 함수 맨 끝으로 이동하여 모든 작업 완료 후 응답
+```javascript
+let treeCache = { files: null, timestamp: 0 };
+const TREE_CACHE_TTL = 5 * 60 * 1000; // 5분
+```
 
-#### 이슈 4: 파일명 파싱 실패
-
-**증상:** Slack 쓰레드에 "🔀 수정 PR 생성" 버튼이 표시되지 않음  
-**원인:** `extractFileInfoFromIssue` 함수가 `CrashScenarios.swift ... line 53` 형식을 인식하지 못함 (기존에는 `File.swift:53` 콜론 형식만 지원)  
-**해결:** 4가지 파싱 패턴 추가
-| 패턴 | 예시 |
-|------|------|
-| `File.swift:53` | 기존 Crashlytics 형식 |
-| `File.swift ... line 53` | 테스트 시나리오 형식 |
-| `File.swift` 단독 | 라인 번호 없는 경우 |
-| `ClassName.method(` → 추론 | 클래스명에서 파일명 유추 |
-
-#### 이슈 5: GitHub Code Search API 인덱싱 문제
-
-**증상:** 파일이 레포에 있는데도 `found: false`로 나옴  
-**원인:** GitHub `search.code` API는 인덱싱에 의존하며, 소규모 레포나 최근 푸시 파일은 인덱싱이 안 될 수 있음  
-**해결:** `search.code` → **Git Tree API** (`git.getTree` recursive)로 교체. Development 브랜치의 전체 파일 트리를 직접 조회하여 100% 확실하게 파일을 찾도록 변경
-
-#### 이슈 6: 인터랙션 핸들러 데이터 키 불일치
-
-**증상:** PR 버튼 클릭 → "수정 코드를 생성할 수 없었습니다" 에러  
-**원인:** Slack 버튼 데이터는 `{ filePath, line }` 형태인데, `fetchSourceFromGithub`는 `{ file, line }`을 destructure하여 `file`이 `undefined`로 됨  
-**해결:** destructuring을 `const file = item.file || item.filePath`로 수정하여 양쪽 형식 모두 호환
+- 인스턴스가 살아있는 동안 캐시 유지
+- 동시 3개 크래시 → Git Tree 최대 1번만 호출
+- 폴더 구조 변경 시 코드 수정 불필요 (git push 후 5분 내 자동 반영)
 
 ---
 
@@ -155,40 +195,78 @@ gcloud functions add-invoker-policy-binding slackInteraction \
 
 ### HTTP 테스트 엔드포인트
 
-Crashlytics Alert는 새로운 이슈에만 트리거되므로, 반복 테스트를 위한 HTTP 엔드포인트를 구현했습니다.
-
 ```bash
-# 시나리오 목록 조회
-curl ".../testCrashAlert?scenario=list"
-
-# 특정 시나리오 실행
-curl ".../testCrashAlert?scenario=force_unwrap_user"
-
-# 전체 12개 시나리오 순차 실행
-curl ".../testCrashAlert?scenario=all"
-
-# 랜덤 실행
-curl ".../testCrashAlert"
+curl ".../testCrashAlert?scenario=list"              # 시나리오 목록
+curl ".../testCrashAlert?scenario=force_unwrap_user"  # 특정 시나리오
+curl ".../testCrashAlert?scenario=all"                # 전체 32개 순차
+curl ".../testCrashAlert"                             # 랜덤
 ```
 
-### CrashScenarios.swift (10가지 복잡한 크래시 시나리오)
+### CrashScenarios.swift — 30가지 크래시 시나리오
 
-실전에서 자주 발생하는 크래시 패턴 10개를 구현:
+| # | 서비스 | 패턴 |
+|---|--------|------|
+| 1 | UserService | `currentUser!.name` 강제 언래핑 |
+| 2 | UserService | 이중·삼중 강제 언래핑 |
+| 3 | UserService | Dictionary 키 없음 강제 언래핑 |
+| 4 | CartService | 빈 배열로 나누기 |
+| 5 | CartService | filter 빈 결과 인덱스 접근 |
+| 6 | CartService | 타입 불일치 `as!` |
+| 7 | OrderService | 멀티스레드 동시 수정 |
+| 8 | OrderService | nil 연쇄 강제 언래핑 |
+| 9 | NetworkManager | 인코딩 안 된 URL 강제 변환 |
+| 10 | NetworkManager | JSON 타입 불일치 |
+| 11 | ChatService | 빈 배열 `.last!` |
+| 12 | ChatService | String `offsetBy` 범위 초과 |
+| 13 | ChatService | `remove(at:)` 범위 초과 |
+| 14 | SearchService | 잘못된 정규식 `try!` |
+| 15 | SearchService | Dictionary + 배열 이중 강제 언래핑 |
+| 16 | SearchService | Array 슬라이싱 범위 초과 |
+| 17 | NotificationService | nil 딥링크 삼중 강제 언래핑 |
+| 18 | NotificationService | payload `as!` 타입 불일치 |
+| 19 | NotificationService | Dictionary 키 미스 + 오버플로우 |
+| 20 | MediaService | 빈 배열 `.randomElement()!` |
+| 21 | MediaService | 음수 인덱스 배열 접근 |
+| 22 | MediaService | `Int(exactly:)!` 소수점 변환 |
+| 23 | ProfileService | 설정값 `as! Bool` 타입 불일치 |
+| 24 | ProfileService | 빈 배열 `.first!` |
+| 25 | ProfileService | `Int("twenty")!` 변환 실패 |
+| 26 | CacheManager | NSCache 미스 + `as! UIImage` |
+| 27 | CacheManager | FileManager `try!` 파일 없음 |
+| 28 | DateFormatterService | 날짜 형식 불일치 |
+| 29 | DateFormatterService | 파싱 불가 날짜 |
+| 30 | DeepCopyService | `Double.infinity` JSON 인코딩 |
 
-1. **force_unwrap_user** — `currentUser!.name` (로그아웃 상태 접근)
-2. **nested_optional** — 이중·삼중 강제 언래핑
-3. **dict_force_unwrap** — Dictionary 키 없음
-4. **division_empty_array** — 빈 배열로 나누기
-5. **empty_filter_index** — filter 결과 빈 배열 인덱스 접근
-6. **force_cast** — 타입 불일치 강제 캐스팅
-7. **race_condition** — Array 멀티스레드 동시 수정
-8. **order_not_found** — nil 연쇄 강제 언래핑
-9. **invalid_url** — 인코딩 안 된 URL 강제 변환
-10. **json_type_mismatch** — API 응답 타입 불일치
+**+ AppView2.swift 2개 시나리오 (총 32개)**
 
-### AppView2.swift (기존 2개 시나리오)
-11. **appview2_fatal** — `fatalError()` 호출
-12. **appview2_index** — `array[4]` 접근 (크기 3)
+### Xcode 프로젝트 폴더 구조
+
+```
+CrashlyticsReport/
+  ├── CrashlyticsReport/
+  │   ├── Manager/
+  │   │   ├── CacheManager.swift
+  │   │   └── NetworkManager.swift
+  │   ├── Model/
+  │   │   └── Model.swift
+  │   ├── Resource/
+  │   │   └── Assets/GoogleService-Info
+  │   ├── Service/
+  │   │   ├── CartService.swift
+  │   │   ├── ChatService.swift
+  │   │   ├── DateFormatterService.swift
+  │   │   ├── DeepCopyService.swift
+  │   │   ├── MediaService.swift
+  │   │   ├── NotificationService.swift
+  │   │   ├── OrderService.swift
+  │   │   ├── ProfileService.swift
+  │   │   ├── SearchService.swift
+  │   │   └── UserService.swift
+  │   └── View/
+  │       ├── ContentView.swift
+  │       └── CrashScenarios.swift
+  └── CrashlyticsReportApp.swift
+```
 
 ---
 
@@ -196,10 +274,12 @@ curl ".../testCrashAlert"
 
 | 파일 | 설명 |
 |------|------|
-| `phase-b-index.js` | Phase B 전체 코드 (PR 생성 기능 포함, 최종 버전) |
-| `CrashScenarios.swift` | 10가지 복잡한 크래시 시나리오 |
+| `phase-b-index.js` | Phase B 전체 코드 (최종 — 하이브리드 검색, 캐시, PR 생성, 에러 복구) |
+| `CrashScenarios.swift` | 30가지 크래시 시나리오 |
 | `phase-a-index.js` | Phase A 코드 (Webhook + Claude 기본) |
-| `GUIDE.md` | 배포 가이드 |
+| `PROJECT_SUMMARY.md` | 이 문서 |
+
+---
 
 ## 필요한 외부 설정
 
@@ -212,9 +292,9 @@ firebase functions:secrets:set GITHUB_TOKEN
 ```
 
 ### GitHub Token 권한
-- Contents: Read & **Write** (브랜치 생성, 파일 커밋)
-- Pull requests: Read & **Write** (PR 생성)
-- Issues: Read & Write (이슈 생성)
+- Contents: Read & Write
+- Pull requests: Read & Write
+- Issues: Read & Write
 - Metadata: Read
 
 ### Slack App 설정
@@ -224,17 +304,41 @@ firebase functions:secrets:set GITHUB_TOKEN
 
 ---
 
+## 유용한 디버깅 명령어
+
+```bash
+# 함수별 로그
+firebase functions:log --only postFatalToSlack 2>&1 | tail -30
+firebase functions:log --only slackInteraction 2>&1 | tail -30
+firebase functions:log --only testCrashAlert 2>&1 | tail -30
+
+# GitHub 검색 전략 확인
+firebase functions:log --only postFatalToSlack 2>&1 | grep -E "직접조회|search.code|Git Tree|파일 못 찾음" | tail -20
+
+# 테스트 크래시 발생
+curl "https://asia-northeast3-crashyltics-slack.cloudfunctions.net/testCrashAlert?scenario=force_unwrap_user"
+
+# 함수 호출 확인
+curl -X POST https://asia-northeast3-crashyltics-slack.cloudfunctions.net/slackInteraction -d 'payload={"type":"test"}'
+```
+
+---
+
 ## 핵심 교훈
 
-1. **Cloud Functions Gen 2는 Gen 1과 다르다** — 인증 정책이 다르고, `res.send()` 후 CPU 스로틀링이 발생한다.
-2. **GitHub Code Search API는 신뢰할 수 없다** — Git Tree API가 훨씬 안정적이다.
-3. **Slack 인터랙션은 3초 제한이 있다** — 무거운 작업은 비동기 처리하되, Gen 2에서는 응답 시점을 잘 조절해야 한다.
-4. **데이터 키 네이밍 일관성이 중요하다** — `file` vs `filePath` 같은 불일치가 런타임 에러를 유발한다.
-5. **단계별 로깅이 디버깅의 핵심이다** — 각 단계마다 로그를 넣어야 어디서 실패하는지 빠르게 찾을 수 있다.
+1. **Cloud Functions Gen 2는 Gen 1과 다르다** — 인증 정책, `res.send()` 후 CPU 스로틀링
+2. **GitHub Code Search API는 신뢰할 수 없다** — 하이브리드 전략 + 캐시 필수
+3. **Slack API에는 글자수 제한이 있다** — section block 3000자, 분할 전송 필요
+4. **Claude 응답이 잘릴 수 있다** — `max_tokens` 넉넉히 + `stop_reason` 체크 + JSON 복구
+5. **데이터 키 네이밍 일관성** — `file` vs `filePath` 불일치가 런타임 에러 유발
+6. **단계별 로깅이 디버깅의 핵심** — 각 단계마다 로그 필수
+7. **동시 요청 고려** — 타임아웃, 메모리, 재시도, 에러 표시
+8. **전역 캐시로 반복 호출 방지** — Git Tree TTL 캐시로 인스턴스 수명 동안 재사용
 
 ---
 
 ## 주의사항
 
-⚠️ **AI 생성 PR은 반드시 코드 리뷰 필요** — Slack 메시지와 PR 본문에 경고 포함, `ai-fix` 라벨 자동 추가  
-⚠️ **테스트 엔드포인트 보안** — 현재 인증 없는 공개 엔드포인트, 프로덕션에서는 제거하거나 인증 추가 권장
+⚠️ **AI 생성 PR은 반드시 코드 리뷰 필요** — `ai-fix` 라벨 자동 추가  
+⚠️ **테스트 엔드포인트 보안** — 프로덕션에서는 제거하거나 인증 추가 권장  
+⚠️ **GitHub 폴더 구조 변경 시** — `git push` 필수, Git Tree 캐시 TTL 5분 후 자동 반영
