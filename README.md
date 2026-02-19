@@ -324,6 +324,24 @@ curl -X POST https://asia-northeast3-crashyltics-slack.cloudfunctions.net/slackI
 
 ---
 
+## 적용 결과
+<img width="1050" height="493" alt="image" src="https://github.com/user-attachments/assets/5ecb055f-2c0e-45fd-a7c6-726bc76dee33" />
+<img width="1050" height="493" alt="image" src="https://github.com/user-attachments/assets/5ecb055f-2c0e-45fd-a7c6-726bc76dee33" />
+
+<img width="643" height="818" alt="image" src="https://github.com/user-attachments/assets/870dc918-ea6e-4424-975d-ee67d77ed920" />
+<img width="643" height="818" alt="image" src="https://github.com/user-attachments/assets/870dc918-ea6e-4424-975d-ee67d77ed920" />
+
+<img width="626" height="785" alt="image" src="https://github.com/user-attachments/assets/f8fb9f27-e320-49e1-92f7-852b70142491" />
+<img width="626" height="785" alt="image" src="https://github.com/user-attachments/assets/f8fb9f27-e320-49e1-92f7-852b70142491" />
+
+<img width="1230" height="584" alt="image" src="https://github.com/user-attachments/assets/779c21df-8433-41dd-8f58-de0f1ac9e4f3" />
+<img width="1230" height="584" alt="image" src="https://github.com/user-attachments/assets/779c21df-8433-41dd-8f58-de0f1ac9e4f3" />
+
+<img width="676" height="744" alt="image" src="https://github.com/user-attachments/assets/336c0294-5991-4dfd-b8f2-59c772c9b784" />
+<img width="676" height="744" alt="image" src="https://github.com/user-attachments/assets/336c0294-5991-4dfd-b8f2-59c772c9b784" />
+
+
+
 ## 핵심 교훈
 
 1. **Cloud Functions Gen 2는 Gen 1과 다르다** — 인증 정책, `res.send()` 후 CPU 스로틀링
