@@ -23,3 +23,8 @@ CocoaPods
 Pods/ Podfile.lock
 CrashlyticsReport/Assets.xcassets/.DS_Store
 CrashlyticsReport/Assets.xcassets
+node_modules/
+.env
+*.secret
+.DS_Store
+*.bfg-report
