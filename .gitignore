@@ -26,3 +26,5 @@ CrashlyticsReport/Assets.xcassets
 node_modules/
 .env
 *.secret
+.DS_Store
+*.bfg-report
